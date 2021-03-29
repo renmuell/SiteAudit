@@ -52,11 +52,8 @@ function site_audit_render() {
     }
 }
 
-function site_audit_render_run ($audit_id) {
-    global $wpdb;
-    $table_name = $wpdb->prefix . 'site_audit';
-    $item = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table_name WHERE id = %d", $audit_id), ARRAY_A);
-    $item["settings"] = maybe_unserialize($item["settings"]);
+function site_audit_run_table_meta_box_hanlder($item)
+{
 
     $posts = get_posts([
         'posts_per_page' => -1,
@@ -64,50 +61,193 @@ function site_audit_render_run ($audit_id) {
     ]);
 
     ?>
-    <div class="wrap">
-    <h2><?= $item["title"] ?> <a class="add-new-h2"
-                                href="<?php echo get_admin_url(get_current_blog_id(), 'admin.php?page=site_audit');?>"><?= __('Back')?></a>
-    </h2>
 
-    <table>
-        <thead>
-            <tr>
-                <th>
-                    Gerät
-                </th>
-                <?php foreach ($item["settings"]["devices"] as $device) : ?>
-                    <th>
-                        <?= $device ?>
-                    </th>
-                <?php endforeach; ?>
-            </tr>
+    <style>
+        .table-wrapper {
+            width:100%;
+            overflow:scroll;
+        }
 
-            <tr>
-                <th>
-                    OS
-                </th>
-                <?php foreach ($item["settings"]["os"] as $os) : ?>
-                    <th>
-                        <?= $os ?>
-                    </th>
-                <?php endforeach; ?>
-            </tr>
+        table  {
+
+            border-collapse: collapse;
+            border-color:#666;
+            border-width:1px;
+        }
+        table th {
+            background:#ccc;
+        }
+
+        table thead tr:nth-child(1) th {
+            position: -webkit-sticky; /* for Safari */
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+
+        table thead tr:nth-child(2) th {
+            position: -webkit-sticky; /* for Safari */
+            position: sticky;
+            top: 21px;
+            z-index: 1;
+        }
+
+        table thead tr:nth-child(3) th {
+            position: -webkit-sticky; /* for Safari */
+            position: sticky;
+            top:  42px;
+            z-index: 1;
+        }
 
 
-        </hhead>
-        <tbody>
-            <?php foreach ($posts as $post) : ?>
+        table th:first-child {
+            position: -webkit-sticky; /* for Safari */
+            position: sticky;
+            left: 0;
+            z-index: 1;
+        }
+
+    </style>
+
+    <div class="table-wrapper">
+        <table border="1">
+            <thead>
                 <tr>
-                    <th>
-                        <a href="<?= get_permalink($post->ID) ?>"><?= $post->post_name ?></a>
+                <th>System</th>
+                <?php foreach ($item["settings"]["devices"] as $device) : ?>
+                    
+                    <th colspan="<?= (count($device["browser"]) * (empty($device["responsive"]) ? 1 : count($device["responsive"]))) ?>" >
+                        <?= $device["name"] ?>
                     </th>
-                    <td>
-                        <input type="checkbox"/>
-                    </td>
+                    
+                <?php endforeach; ?>
                 </tr>
-            <?php endforeach; ?>
-        </tbody>
-    </table>
+                <tr>
+                <th>Browser</th>
+                <?php foreach ($item["settings"]["devices"] as $device) : ?>
+                    <?php foreach ($device["browser"] as $browser) : ?>
+                    <th colspan="<?= count($device["responsive"]) ?>">
+                        <?= $browser ?>
+                    </th>
+                    <?php endforeach; ?>
+                <?php endforeach; ?>
+                </tr>
+                <tr>
+                <th>Responsive</th>
+                <?php foreach ($item["settings"]["devices"] as $device) : ?>
+                    <?php foreach ($device["browser"] as $browser) : ?>
+                        <?php if (empty($device["responsive"])) : ?>
+                            <th>-</th>
+                        <?php else : ?>
+                            <?php foreach ($device["responsive"] as $responsive) : ?>
+                            <th>
+                                <?= $responsive ?>
+                            </th>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    <?php endforeach; ?>
+                <?php endforeach; ?>
+                </tr>
+            </hhead>
+            <tbody>
+                <?php foreach ($posts as $post) : ?>
+                    <tr>
+                        <th>
+                            <a href="<?= get_permalink($post->ID) ?>"><?= $post->post_name ?></a>
+                        </th>
+
+                        <?php foreach ($item["settings"]["devices"] as $device) : ?>
+                            <?php foreach ($device["browser"] as $browser) : ?>
+                                <?php if (empty($device["responsive"])) : ?>
+                                    <td>
+                                        <form>
+                                            <input type="hidden" value="<?= $device["id"] ?>">
+                                            <input type="hidden" value="<?= $browser ?>">
+                                            <input type="hidden" value="<?= $responsive ?>">
+                                            <input type="radio" name="result"/><label>ok</label>
+                                            <br>
+                                            <input type="radio" name="result"/><label>fail</label>
+                                            <textarea></textarea>
+                                        </form>
+                                    </td>
+                                <?php else : ?>
+                                    <?php foreach ($device["responsive"] as $responsive) : ?>
+                                        <td>
+                                            <form>
+                                                <input type="hidden" value="<?= $device["id"] ?>">
+                                                <input type="hidden" value="<?= $browser ?>">
+                                                <input type="hidden" value="<?= $responsive ?>">
+                                                <input type="radio" name="result"/><label>ok</label>
+                                                <br>
+                                                <input type="radio" name="result"/><label>fail</label>
+                                                <textarea></textarea>
+                                            </form>
+                                        </td>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
+                            <?php endforeach; ?>
+                        <?php endforeach; ?>
+
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+        </div>
+
+<?php
+}
+
+function site_audit_run_status_meta_box_hanlder($item)
+{
+    $posts = get_posts([
+        'posts_per_page' => -1,
+        'post_type'      => $item["settings"]["post_types"]
+    ]);
+
+    $num_all = 0;
+    foreach ($item["settings"]["devices"] as $device){
+        $num_all += (count($device["browser"]) * (empty($device["responsive"]) ? 1 : count($device["responsive"]))) * count($posts);
+    }
+
+
+    ?>
+        Progress:
+        <progress value="0" max="<?= $num_all ?>">0 %</progress>
+        0 / <?= $num_all ?>
+
+        <br>
+        <br>
+
+        <?php var_dump( $item["settings"]); ?>
+
+    <?php
+}
+
+function site_audit_render_run ($audit_id) {
+   
+    global $wpdb;
+    $table_name = $wpdb->prefix . 'site_audit';
+    $item = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table_name WHERE id = %d", $audit_id), ARRAY_A);
+    $item["settings"] = maybe_unserialize($item["settings"]);
+
+    add_meta_box('site_audit_run_status_meta_box', 'Stats', 'site_audit_run_status_meta_box_hanlder', 'site_audit_run_status_meta_box', 'normal', 'default');
+    add_meta_box('site_audit_run_table_meta_box', 'Audit', 'site_audit_run_table_meta_box_hanlder', 'site_audit_run_table_meta_box', 'normal', 'default');
+    
+    ?>
+    <div class="wrap">    
+        <h2><?= $item["title"] ?> <a class="add-new-h2" href="<?php echo get_admin_url(get_current_blog_id(), 'admin.php?page=site_audit');?>"><?= __('Back')?></a></h2>
+
+        <div class="metabox-holder" id="poststuff">
+            <div id="post-body">
+                <div id="post-body-content">
+                    
+                    <?php do_meta_boxes('site_audit_run_status_meta_box', 'normal', $item); ?>
+
+                    <?php do_meta_boxes('site_audit_run_table_meta_box', 'normal', $item); ?>
+                </div>
+            </div>
+        </div>
+    
 
     </div>
     <?php
@@ -144,6 +284,165 @@ function site_audit_render_table() {
     <?php
 }
 
+function site_audit_form_is_device_checked ($device_id, $devices) {
+    foreach ($devices as $device) {
+        if ($device["id"] == $device_id) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function site_audit_form_is_browser_checked ($device_id, $browser, $devices) {
+    foreach ($devices as $device) {
+        if ($device["id"] == $device_id) {
+            return in_array($browser, $device["browser"]);
+        }
+    }
+    return false;
+}
+
+function site_audit_form_is_responsive_checked ($device_id, $responsive, $devices) {
+    foreach ($devices as $device) {
+        if ($device["id"] == $device_id) {
+            return in_array($responsive, $device["responsive"]);
+        }
+    }
+    return false;
+}
+
+function site_audit_device_meta_box_handler($param)
+{
+    $item = $param["item"];
+    $settings = $param["settings"];
+    ?>
+ 
+    <style>
+        #device_wrapper {
+            display:flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: stretch;
+        }
+        .device{
+            flex-grow: 1;
+            border:1px solid #ccc;
+            
+            box-sizing:border-box;
+            padding:10px;
+        }
+    </style>
+
+    <div id="device_wrapper">
+
+        <?php foreach($settings["devices"] as $device) : ?>
+
+            <div class="device">
+
+                <input hidden name="devices_<?= $device["id"] ?>_name" value="<?= $device["name"] ?>"/>
+                <input hidden name="devices_<?= $device["id"] ?>_os" value="<?= $device["os"] ?>"/>
+        
+                <input type="checkbox" id="devices_<?= $device["id"] ?>" name="devices[]" value="<?= $device["id"] ?>" <?= (site_audit_form_is_device_checked($device["id"], $item["settings"]["devices"])) ? "checked=checked" : "" ?>>
+                <label for="devices_<?= $device["id"] ?>"><?= $device["name"] ?></label>
+
+                <br>
+                <br>
+                <b>OS</b>
+                <br>
+                 <?= $device["os"] ?>
+                <br>
+                
+                <?php if (!empty($device["browser"])) : ?>
+                    <br>
+                    <b>browser</b>
+                    <br>
+                    <br>
+
+                    <?php foreach ( $device["browser"]  as $browser ) : ?>
+                    
+                    <div>
+                        <input type="checkbox" id="devices_<?= $device["id"] ?>_browser_<?= $browser ?>" name="devices_<?= $device["id"] ?>_browser[]" value="<?= $browser ?>" <?= (site_audit_form_is_browser_checked($device["id"], $browser, $item["settings"]["devices"])) ? "checked=checked" : "" ?>>
+                        <label for="devices_<?= $device["id"] ?>_browser_<?= $browser ?>"><?= $browser ?></label>
+                    </div>
+
+                    <?php endforeach; ?>
+
+            
+
+                <?php endif; ?>
+
+                <?php if (!empty($device["responsive"])) : ?>
+                    <br>
+                    
+                    <b>responsive</b>
+                    <br>
+                    <br>
+
+                    <?php foreach ( $device["responsive"]  as $responsive ) : ?>
+
+                    <div>
+                        <input type="checkbox" id="devices_<?= $device["id"] ?>_responsive_<?= $responsive ?>" name="devices_<?= $device["id"] ?>_responsive[]" value="<?= $responsive ?>" <?= (site_audit_form_is_browser_checked($device["id"], $responsive, $item["settings"]["devices"])) ? "checked=checked" : "" ?>>
+                        <label for="devices_<?= $device["id"] ?>_responsive_<?= $responsive ?>"><?= $responsive ?></label>
+                    </div>
+
+                    <?php endforeach; ?>
+
+                <?php endif; ?>
+
+            </div>
+        <?php endforeach; ?>
+
+        </div>
+    <?php
+}
+
+function site_audit_posttypes_meta_box_handler($param)
+{
+
+    $item = $param["item"];
+    $settings = $param["settings"];
+    ?>
+
+        <fieldset>
+
+            <?php foreach ( $settings["post_types"]  as $post_type ) : ?>
+
+                <div>
+                    <input type="checkbox" id="post_types_<?= $post_type ?>" name="post_types[]" value="<?= $post_type ?>" <?= (in_array($post_type, $item["settings"]["post_types"])) ? "checked=checked" : "" ?>>
+                    <label for="post_types_<?= $post_type ?>"><?= $post_type ?></label>
+                </div>
+
+            <?php endforeach; ?>
+
+        </fieldset>
+    <?php
+}
+
+
+function site_audit_roles_meta_box_handler($param)
+{
+
+    $item = $param["item"];
+    $settings = $param["settings"];
+
+    ?>
+
+        <fieldset>
+
+            <?php foreach ( $settings["roles"]  as $roles ) : ?>
+
+                <div>
+                    <input type="checkbox" id="roles_<?= $roles ?>" name="roles[]" value="<?= $roles ?>" <?= (in_array($roles, $item["settings"]["roles"])) ? "checked=checked" : "" ?>>
+                    <label for="roles_<?= $roles ?>"><?= $roles ?></label>
+                </div>
+
+            <?php endforeach; ?>
+
+        </fieldset>
+    <?php
+}
+
+
 function site_audit_form_render()
 {
     global $wpdb;
@@ -157,10 +456,12 @@ function site_audit_form_render()
         'id'     => 0,
         'title'  => '',
         'settings' => [
-            "devices"    => [],
-            "os"         => [],
-            "browser"    => [],
-            "responsive" => [],
+            "devices"    => [
+                "id" => -1,
+                "os" => "",
+                "browser" => [],
+                "responsive" => []
+            ],
             "post_types" => [],
             "roles"      => []
         ],
@@ -172,11 +473,28 @@ function site_audit_form_render()
         // combine our default item with request params
         $item = shortcode_atts($default, $_REQUEST);
 
+        $deviceSettings = [];
+
+        if (isset($_REQUEST['devices'])) {
+            foreach ($_REQUEST["devices"] as $device) {
+                $deviceSetting = [
+                    "id" =>  $device,
+                    "name" => $_REQUEST['devices_'.$device.'_name'],
+                    "os" => $_REQUEST['devices_'.$device.'_os']
+                ];
+                if (isset($_REQUEST['devices_'.$device.'_browser'])) {
+                    $deviceSetting["browser"] = $_REQUEST['devices_'.$device.'_browser'];
+                }
+                if (isset($_REQUEST['devices_'.$device.'_responsive'])) {
+                    $deviceSetting["responsive"] = $_REQUEST['devices_'.$device.'_responsive'];
+                }
+
+                $deviceSettings[] = $deviceSetting;
+            }
+        }
+        
         $item["settings"] = maybe_serialize([
-            "devices"    => $_REQUEST["devices"],
-            "os"         => $_REQUEST["os"],
-            "browser"    => $_REQUEST["browser"],
-            "responsive" => $_REQUEST["responsive"],
+            "devices"    => $deviceSettings,
             "post_types" => $_REQUEST["post_types"],
             "roles"      => $_REQUEST["roles"],
         ]);
@@ -220,16 +538,16 @@ function site_audit_form_render()
     }
 
     // here we adding our custom meta box
-    add_meta_box('site_audit_data_meta_box', 'Audit Data', 'site_audit_data_meta_box_handler', 'audit', 'normal', 'default');
+    add_meta_box('site_audit_data_meta_box', 'General', 'site_audit_data_meta_box_handler', 'audit', 'normal', 'default');
+    add_meta_box('site_audit_device_meta_box', 'Devices', 'site_audit_device_meta_box_handler', 'devices', 'normal', 'default');
+    add_meta_box('site_audit_posttypes_meta_box', 'Post-Tpyes', 'site_audit_posttypes_meta_box_handler', 'posttypes', 'normal', 'default');
+    add_meta_box('site_audit_roles_meta_box', 'Roles', 'site_audit_roles_meta_box_handler', 'roles', 'normal', 'default');
 
     $settings = get_option("site_audit_settings");
 
     if (!is_array($settings)) {
         $settings = [
             "devices"    => [],
-            "os"         => [],
-            "browser"    => [],
-            "responsive" => [],
             "post_types" => [],
             "roles"      => []
         ];
@@ -261,91 +579,10 @@ function site_audit_form_render()
                 <div id="post-body-content">
                     <?php /* And here we call our custom meta box */ ?>
                     <?php do_meta_boxes('audit', 'normal', $item); ?>
+                    <?php do_meta_boxes('devices', 'normal', ["item" => $item, "settings" => $settings]); ?>
+                    <?php do_meta_boxes('posttypes', 'normal', ["item" => $item, "settings" => $settings]); ?>
+                    <?php do_meta_boxes('roles', 'normal', ["item" => $item, "settings" => $settings]); ?>
 
-                    <fieldset>
-                        <legend>Geräte</legend>
-
-                        <?php foreach ( $settings["devices"]  as $device ) : ?>
-
-                            <div>
-                                <input type="checkbox" id="devices_<?= $device ?>" name="devices[]" value="<?= $device ?>" <?= (in_array($device, $item["settings"]["devices"])) ? "checked=checked" : "" ?>>
-                                <label for="devices_<?= $device ?>"><?= $device ?></label>
-                            </div>
-
-                        <?php endforeach; ?>
-
-                    </fieldset>
-
-                    <fieldset>
-                        <legend>Os</legend>
-
-                        <?php foreach ( $settings["os"]  as $os ) : ?>
-
-                            <div>
-                                <input type="checkbox" id="os_<?= $os ?>" name="os[]" value="<?= $os ?>" <?= (in_array($os, $item["settings"]["os"])) ? "checked=checked" : "" ?>>
-                                <label for="os_<?= $os ?>"><?= $os ?></label>
-                            </div>
-
-                        <?php endforeach; ?>
-
-                    </fieldset>
-
-                    <fieldset>
-                        <legend>Browser</legend>
-
-                        <?php foreach ( $settings["browser"]  as $browser ) : ?>
-
-                            <div>
-                                <input type="checkbox" id="browser_<?= $browser ?>" name="browser[]" value="<?= $browser ?>" <?= (in_array($browser, $item["settings"]["browser"])) ? "checked=checked" : "" ?>>
-                                <label for="browser_<?= $browser ?>"><?= $browser ?></label>
-                            </div>
-
-                        <?php endforeach; ?>
-
-                    </fieldset>
-
-                    <fieldset>
-                        <legend>Responsive</legend>
-
-                        <?php foreach ( $settings["responsive"]  as $responsive ) : ?>
-
-                            <div>
-                                <input type="checkbox" id="responsive_<?= $responsive ?>" name="responsive[]" value="<?= $responsive ?>" <?= (in_array($responsive, $item["settings"]["responsive"])) ? "checked=checked" : "" ?>>
-                                <label for="responsive_<?= $responsive ?>"><?= $responsive ?></label>
-                            </div>
-
-                        <?php endforeach; ?>
-
-                    </fieldset>
-
-
-                    <fieldset>
-                        <legend>Post-Types</legend>
-
-                        <?php foreach ( $settings["post_types"]  as $post_type ) : ?>
-
-                            <div>
-                                <input type="checkbox" id="post_types_<?= $post_type ?>" name="post_types[]" value="<?= $post_type ?>" <?= (in_array($post_type, $item["settings"]["post_types"])) ? "checked=checked" : "" ?>>
-                                <label for="post_types_<?= $post_type ?>"><?= $post_type ?></label>
-                            </div>
-
-                        <?php endforeach; ?>
-
-                    </fieldset>
-
-                    <fieldset>
-                        <legend>Roles</legend>
-
-                        <?php foreach ( $settings["roles"]  as $roles ) : ?>
-
-                            <div>
-                                <input type="checkbox" id="roles_<?= $roles ?>" name="roles[]" value="<?= $roles ?>" <?= (in_array($roles, $item["settings"]["roles"])) ? "checked=checked" : "" ?>>
-                                <label for="roles_<?= $roles ?>"><?= $roles ?></label>
-                            </div>
-
-                        <?php endforeach; ?>
-
-                    </fieldset>
 
                     <input id="author" name="author" type="hidden" value="<?php echo esc_attr($item['author'])?>">
 
@@ -371,11 +608,9 @@ function site_audit_data_meta_box_handler($item)
 <table cellspacing="2" cellpadding="5" style="width: 100%;" class="form-table">
     <tbody>
     <tr class="form-field">
-        <th valign="top" scope="row">
-            <label for="title"><?php _e('Title', 'cltd_example')?></label>
-        </th>
+  
         <td>
-            <input id="title" name="title" type="text" style="width: 95%" value="<?php echo esc_attr($item['title'])?>"
+        <input id="title" name="title" type="text" style="width: 95%" value="<?php echo esc_attr($item['title'])?>"
                    size="50" class="code" placeholder="<?php _e('Title', 'site-audit')?>" required>
         </td>
     </tr>
@@ -392,34 +627,120 @@ function site_audit_form_validate($item)
     return implode('<br />', $messages);
 }
 
-function site_audit_settings_render () {
-
-    $settings = get_option("site_audit_settings");
-
-    if (!is_array($settings)) {
-        $settings = [
-            "devices"    => [],
-            "os"         => [],
-            "browser"    => [],
-            "responsive" => [],
-            "post_types" => [],
-            "roles"      => []
+function generateDeviceHtml($values = null) {
+    $number = "%%number%%";
+    if ($values == null) {
+        $values = [
+            "name" => "",
+            "os"   => [],
+            "browser"   => [],
+            "responsive"   => []
         ];
+    } else {
+        $number = $values["id"];
     }
 
-    if (isset($_REQUEST['nonce']) && wp_verify_nonce($_REQUEST['nonce'], basename(__FILE__))) {
+    ob_start();
+    ?>
+        <fieldset class="device" data-number="<?= $number ?>">
+            <label>Name</label>
+            <br>
+            <input type="text" name="device_<?= $number ?>_name" value="<?= $values["name"] ?>"/>
+            <br>
+            <label>OS</label>
+            <br>
+            <input type="text" name="device_<?= $number ?>_os" value="<?= $values["os"] ?>"/>
+            <br>
 
-        $settings["devices"]    = array_map(function ($item) { return trim($item); } , explode("\n", $_REQUEST["devices"]));
-        $settings["os"]         = array_map(function ($item) { return trim($item); } , explode("\n", $_REQUEST["os"]));
-        $settings["browser"]    = array_map(function ($item) { return trim($item); } , explode("\n", $_REQUEST["browser"]));
-        $settings["responsive"] = array_map(function ($item) { return trim($item); } , explode("\n", $_REQUEST["responsive"]));
-        $settings["post_types"] = $_REQUEST["post_types"];
-        $settings["roles"]      = $_REQUEST["roles"];
+            <label>Browser</label>
+            <br>
+            <textarea rows="5" id="device_<?= $number ?>_browser" name="device_<?= $number ?>_browser"><?= implode("\n", $values["browser"]) ?></textarea>
+            <br>
+
+            <label>Responsive</label>
+            <br>
+            <textarea rows="5" id="device_<?= $number ?>_responsive" name="device_<?= $number ?>_responsive"><?= implode("\n", $values["responsive"]) ?></textarea>
+            <br>
+            <br>
+            <button onclick="delete_device(<?= $number ?>, event)">delete</button>
+         
+        </fieldset>
+    <?php
+    return ob_get_clean();
+}
+
+function site_audit_settings_devices_meta_box_handler ($settings) {
+
+ ?>
+
+    <style>
+        #device_wrapper {
+            display:flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: stretch;
+        }
+        .device{
+            flex-grow: 1;
+            border:1px solid #ccc;
+            
+            box-sizing:border-box;
+            padding:10px;
+        }
+    </style>
 
 
+    <input type="hidden" id="deviceMaxNubmer" name="deviceMaxNubmer" readonly value="<?= count($settings["devices"]) ?>"/>
 
-        update_option("site_audit_settings", $settings);
-    }
+    <script>
+        function delete_device(number, event) {
+            event.preventDefault();
+            event.stopPropagation();
+            if (confirm("Delete Device: '" +  document.querySelector('[name="device_'+number+'_name"]').value + "'?")) {
+                document.querySelector('[data-number="'+number+'"]').remove();
+            }
+        
+        }
+    </script>
+
+    <div id="device_wrapper">
+
+        <?php foreach($settings["devices"] as $device) : ?>
+
+            <?= generateDeviceHtml($device); ?>
+
+        <?php endforeach; ?>
+
+    </div>
+    <br>
+    <button id="add_device_btn">Add Device</button>
+
+    <script id="device_templaste" type="text/template">
+        <?= generateDeviceHtml();  ?>
+    </script>
+
+    <script>
+
+        document.querySelector('#add_device_btn').addEventListener("click", function(event){
+            event.preventDefault();
+            event.stopPropagation();
+
+            var diveces = document.querySelectorAll('#device_wrapper fieldset');
+            var maxNubmer = 0;
+            if (diveces.length > 0) {
+                maxNubmer = Math.max.apply(null, Array.from(diveces).map(function(item){
+                return parseInt(item.dataset.number);
+            }));
+            } 
+            document.querySelector('#deviceMaxNubmer').value = maxNubmer + 1;
+            document.querySelector('#device_wrapper').innerHTML += document.querySelector('#device_templaste').innerHTML.replaceAll("%%number%%", maxNubmer + 1);
+        });
+
+    </script>
+ <?php
+}
+
+function site_audit_settings_post_types_meta_box_handler ( $settings) {
 
     $args = array(
         'public'   => true,
@@ -430,61 +751,39 @@ function site_audit_settings_render () {
 
      $post_types = get_post_types( $args, $output, $operator );
 
-     $roles =  [];
-     $editable_roles = get_editable_roles();
-     foreach ($editable_roles as $role => $details) {
-         $sub['role'] = esc_attr($role);
-         $sub['name'] = translate_user_role($details['name']);
-         $roles[] = $sub;
-     }
+
 
     ?>
-    <div class="wrap">
+    <fieldset>
+ 
+        <?php if ($post_types) : foreach ( $post_types  as $post_type ) : ?>
 
-    <h2>
-        <?= __('Settings') ?>
-    </h2>
+            <div>
+                <input type="checkbox" id="<?= $post_type ?>" name="post_types[]" value="<?= $post_type ?>" <?= (in_array($post_type, $settings["post_types"])) ? "checked=checked" : "" ?>>
+                <label for="<?= $post_type ?>"><?= $post_type ?></label>
+            </div>
 
-    <form id="site-audit-settings" method="Post">
-        <input type="hidden" name="nonce" value="<?php echo wp_create_nonce(basename(__FILE__))?>"/>
+        <?php endforeach; endif; ?>
 
-        <label>Devices</label>
-        <br>
-        <textarea rows="5" id="devices" name="devices"><?= implode("\n", $settings["devices"]) ?></textarea>
-        <br>
+    </fieldset>
+ <?php 
+}
 
-        <label>OS</label>
-        <br>
-        <textarea rows="5" id="os" name="os"><?= implode("\n", $settings["os"]) ?></textarea>
-        <br>
 
-        <label>Browser</label>
-        <br>
-        <textarea rows="5" id="browser" name="browser"><?= implode("\n", $settings["browser"]) ?></textarea>
-        <br>
+function site_audit_settings_roles_meta_box_handler ( $settings) {
 
-        <label>Responsive</label>
-        <br>
-        <textarea rows="5" id="responsive" name="responsive"><?= implode("\n", $settings["responsive"]) ?></textarea>
-        <br>
 
-        <fieldset>
-            <legend>Post-Types</legend>
+    $roles =  [];
+    $editable_roles = get_editable_roles();
+    foreach ($editable_roles as $role => $details) {
+        $sub['role'] = esc_attr($role);
+        $sub['name'] = translate_user_role($details['name']);
+        $roles[] = $sub;
+    }
 
-            <?php if ($post_types) : foreach ( $post_types  as $post_type ) : ?>
-
-                <div>
-                    <input type="checkbox" id="<?= $post_type ?>" name="post_types[]" value="<?= $post_type ?>" <?= (in_array($post_type, $settings["post_types"])) ? "checked=checked" : "" ?>>
-                    <label for="<?= $post_type ?>"><?= $post_type ?></label>
-                </div>
-
-            <?php endforeach; endif; ?>
-
-        </fieldset>
-
-        <fieldset>
-            <legend>Roles</legend>
-
+    ?>
+      <fieldset>
+     
             <?php if ($roles) : foreach ( $roles  as $role ) : ?>
 
                 <div>
@@ -495,9 +794,71 @@ function site_audit_settings_render () {
             <?php endforeach; endif; ?>
 
         </fieldset>
+    <?php
+}
 
-        <input type="submit" value="<?php _e('Save')?>" id="submit" class="button-primary" name="submit">
 
+function site_audit_settings_render ( $settings) {
+
+    $settings = get_option("site_audit_settings");
+
+    if (!is_array($settings)) {
+        $settings = [
+            "devices"    => [],
+            "post_types" => [],
+            "roles"      => []
+        ];
+    }
+
+    if (isset($_REQUEST['nonce']) && wp_verify_nonce($_REQUEST['nonce'], basename(__FILE__))) {
+ 
+        $deviceMaxNubmer = intval($_REQUEST["deviceMaxNubmer"]);
+        $settings["devices"] = [];
+        for ($i=1; $i <= $deviceMaxNubmer; $i++) { 
+           
+            if (isset($_REQUEST["device_".$i."_name"])) {
+                $settings["devices"][] = [
+                    "id"   => $i,
+                    "name" => $_REQUEST["device_".$i."_name"],
+                    "os"         => $_REQUEST["device_".$i."_os"],
+                    "browser"    => array_filter(array_map(function ($item) { return trim($item); } , explode("\n", $_REQUEST["device_".$i."_browser"])), function ($item) { return !empty($item); }),
+                    "responsive" => array_filter(array_map(function ($item) { return trim($item); } , explode("\n", $_REQUEST["device_".$i."_responsive"])), function ($item) { return !empty($item); })
+                ];
+            }
+        }
+
+        $settings["post_types"] = $_REQUEST["post_types"];
+        $settings["roles"]      = $_REQUEST["roles"];
+
+        update_option("site_audit_settings", $settings);
+    }
+
+
+
+     add_meta_box('site_audit_settings_devices_meta_box', 'Devices', 'site_audit_settings_devices_meta_box_handler', 'site_audit_settings_devices_meta_box', 'normal', 'default');
+     add_meta_box('site_audit_settings_post_types_meta_box', 'Post-Type', 'site_audit_settings_post_types_meta_box_handler', 'site_audit_settings_post_types_meta_box', 'normal', 'default');
+     add_meta_box('site_audit_settings_roles_meta_box', 'Roles', 'site_audit_settings_roles_meta_box_handler', 'site_audit_settings_roles_meta_box', 'normal', 'default');
+
+    ?>
+    <div class="wrap">
+
+    <h2>
+        <?= __('Settings') ?>
+    </h2>
+
+    <form id="site-audit-settings" method="Post">
+        <input type="hidden" name="nonce" value="<?php echo wp_create_nonce(basename(__FILE__))?>"/>
+        <div class="metabox-holder" id="poststuff">
+            <div id="post-body">
+                <div id="post-body-content">
+                    
+                    <?php do_meta_boxes('site_audit_settings_devices_meta_box', 'normal', $settings); ?>
+                    <?php do_meta_boxes('site_audit_settings_post_types_meta_box', 'normal', $settings); ?>
+                    <?php do_meta_boxes('site_audit_settings_roles_meta_box', 'normal', $settings); ?>
+                    <input type="submit" value="<?php _e('Save')?>" id="submit" class="button-primary" name="submit">
+                </div>
+            </div>
+        </div>
     </form>
 
     </div>
